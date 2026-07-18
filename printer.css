@@ -1,0 +1,388 @@
+@font-face {
+  font-family: "ui-mono-fallback";
+  src: local("JetBrains Mono"), local("SF Mono"), local("Consolas");
+}
+
+:root {
+  color-scheme: light;
+  --desk: #e9e8e3;
+  --desk-grid: rgba(30, 32, 34, 0.035);
+  --printer: #252628;
+  --printer-deep: #17181a;
+  --printer-edge: #3a3b3e;
+  --muted: #747775;
+  --paper: #fffef9;
+  --paper-edge: #e8e4d9;
+  --ink: #252522;
+  --ink-dim: #8b897f;
+  --green: #72df9d;
+  --face-label: Inter, system-ui, -apple-system, sans-serif;
+  --face-receipt: ui-monospace, "JetBrains Mono", "SF Mono", Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --desk: #1b1c1d;
+    --desk-grid: rgba(255, 255, 255, 0.025);
+    --printer: #303235;
+    --printer-deep: #111214;
+    --printer-edge: #47494d;
+    --muted: #8e918e;
+    --paper: #f6f3e9;
+    --paper-edge: #d9d4c6;
+    --ink: #272722;
+    --ink-dim: #858277;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html,
+body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  overflow: hidden;
+  font-family: var(--face-label);
+  background-color: var(--desk);
+  background-image:
+    linear-gradient(var(--desk-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--desk-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+button { font: inherit; }
+
+.stage {
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.toolbar {
+  position: fixed;
+  inset: 18px 20px auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.status,
+.sound-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--muted) 18%, transparent);
+  border-radius: 999px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--desk) 78%, transparent);
+  backdrop-filter: blur(12px);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  pointer-events: auto;
+}
+
+.status__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d7675c;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #d7675c 15%, transparent);
+  transition: background 200ms ease, box-shadow 200ms ease;
+}
+
+.status.connected .status__dot {
+  background: var(--green);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 15%, transparent);
+}
+
+.sound-toggle {
+  cursor: pointer;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.sound-toggle:hover {
+  color: color-mix(in srgb, var(--muted) 35%, currentColor);
+  border-color: color-mix(in srgb, var(--muted) 36%, transparent);
+}
+
+.sound-toggle:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
+}
+
+.sound-toggle svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sound-toggle[aria-pressed="false"] svg path:last-child { opacity: 0.22; }
+
+.printer-scene {
+  position: fixed;
+  top: clamp(76px, 10vh, 112px);
+  left: 50%;
+  width: 340px;
+  transform: translateX(-50%);
+  z-index: 700;
+}
+
+.printer {
+  position: relative;
+  width: 340px;
+  height: 154px;
+  filter: drop-shadow(0 22px 24px rgba(0, 0, 0, 0.2));
+  z-index: 3;
+}
+
+.printer__top {
+  position: absolute;
+  inset: 0 13px auto;
+  height: 72px;
+  border-radius: 28px 28px 8px 8px;
+  background: linear-gradient(145deg, #404246 0%, var(--printer) 46%, var(--printer-deep) 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.11);
+}
+
+.printer__lid-line {
+  position: absolute;
+  inset: 17px 22px auto;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.printer__body {
+  position: absolute;
+  inset: 52px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 30px 28px;
+  border-radius: 9px 9px 22px 22px;
+  background: linear-gradient(155deg, var(--printer-edge), var(--printer) 42%, var(--printer-deep));
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.printer__brand {
+  color: rgba(255, 255, 255, 0.44);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.18em;
+}
+
+.printer__controls {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(255, 255, 255, 0.28);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.printer__led {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #31573e;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+  transition: background 120ms ease, box-shadow 120ms ease;
+}
+
+.printer__led.active {
+  background: var(--green);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--green) 70%, transparent);
+}
+
+.printer__slot {
+  position: absolute;
+  left: 31px;
+  right: 31px;
+  bottom: -5px;
+  height: 14px;
+  border-radius: 2px 2px 7px 7px;
+  background: #090a0b;
+  box-shadow: inset 0 3px 5px #000, 0 1px 0 rgba(255, 255, 255, 0.05);
+  z-index: 4;
+}
+
+.printer__drawer {
+  position: absolute;
+  right: 52px;
+  bottom: -8px;
+  width: 38px;
+  height: 10px;
+  border-radius: 0 0 5px 5px;
+  background: var(--printer-deep);
+  transition: transform 170ms cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+.printer__drawer.kick { transform: translateY(8px); }
+
+.feed {
+  position: absolute;
+  top: 152px;
+  left: 50%;
+  width: max-content;
+  transform: translateX(-50%);
+  z-index: 2;
+}
+
+.feed__paper {
+  width: max-content;
+  height: 0;
+  overflow: hidden;
+  background: var(--paper);
+  border: 1px solid var(--paper-edge);
+  border-top: 0;
+  box-shadow: 0 12px 22px -15px rgba(0, 0, 0, 0.35);
+}
+
+/* A fresh roll stays inside the printer until an actual print/feed event. */
+.feed__paper:not(.printing) {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.feed__lines {
+  box-sizing: content-box;
+  width: 43ch;
+  padding: 12px 14px 0;
+  color: var(--ink);
+  font-family: var(--face-receipt);
+  font-size: 12.5px;
+  line-height: 1.55;
+  white-space: pre;
+  text-shadow: 0 0 0.3px currentColor;
+}
+
+.line {
+  min-height: 1.55em;
+  animation: ink-develop 180ms ease-out both;
+}
+.run.bold { font-weight: 700; }
+.run.underline { text-decoration: underline; }
+.run.italic { font-style: italic; }
+.run.big {
+  display: inline-block;
+  font-size: calc(1em * var(--font-scale, 1));
+  transform: scaleX(var(--sx, 1));
+  transform-origin: left top;
+}
+.run.invert {
+  color: var(--paper);
+  background: var(--ink);
+  box-shadow: 0 0 0 2px var(--ink);
+}
+
+.block {
+  padding: 6px 0;
+  animation: ink-develop 220ms ease-out both;
+}
+.block canvas,
+.block svg { max-width: 100%; }
+
+.barcode-fallback {
+  display: inline-block;
+  padding: 6px 10px;
+  border: 1px dashed var(--ink-dim);
+  color: var(--ink-dim);
+  font-size: 11px;
+}
+
+.receipt-desk {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.feed__paper.torn {
+  position: fixed;
+  margin: 0;
+  overflow: hidden;
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  box-shadow: 0 20px 35px -18px rgba(0, 0, 0, 0.42);
+  will-change: left, top, transform;
+  transition:
+    left 560ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    top 560ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    transform 560ms cubic-bezier(0.2, 0.9, 0.25, 1),
+    box-shadow 180ms ease;
+}
+
+.feed__paper.torn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 0 46%, rgba(0, 0, 0, 0.018) 50%, transparent 54%);
+}
+
+.feed__paper.torn.settled { box-shadow: 0 24px 40px -20px rgba(0, 0, 0, 0.45); }
+
+.feed__paper.torn.dragging {
+  cursor: grabbing;
+  box-shadow: 0 34px 44px -20px rgba(0, 0, 0, 0.5);
+  transition: box-shadow 160ms ease, transform 160ms ease;
+}
+
+.hint {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  z-index: 50;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  transform: translateX(-50%);
+  transition: opacity 300ms ease;
+}
+
+.hint.hidden { opacity: 0; }
+
+@keyframes ink-develop {
+  from {
+    opacity: 0.2;
+    filter: blur(0.45px);
+  }
+}
+
+@media (max-width: 600px) {
+  .printer-scene { transform: translateX(-50%) scale(0.86); transform-origin: top center; }
+  .sound-toggle span { display: none; }
+  .sound-toggle { width: 34px; justify-content: center; padding: 0; }
+  .feed__lines { font-size: 11px; }
+  .hint { width: 100%; text-align: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feed__paper,
+  .feed__paper.torn,
+  .printer__drawer { transition: none !important; }
+  .line,
+  .block { animation: none !important; }
+}
