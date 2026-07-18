@@ -55,15 +55,11 @@ bun run server.ts
 Then open **http://localhost:4300**. It connects to the daemon over a
 WebSocket and shows "printer ready" once both are up.
 
-The **Width** box in the toolbar sets the roll width in millimetres (32–152,
-default 80), converted internally to the character columns the layout needs.
-The two standard sizes are pinned to their real column counts — 80 mm to 48
-columns, 58 mm to 32 — because their unprintable margins differ (8 mm vs
-10 mm) and no single formula hits both; other widths are derived at 203 dpi
-with a 12-dot font A cell and a nominal 8 mm margin, so treat them as
-approximate. The setting is remembered between sessions and applies to the
-next receipt; receipts already on the desk keep the width they were printed
-at.
+The **Width** box in the toolbar sets the paper width in character columns
+(16–96, default 48) — the unit ESC/POS itself works in. The two rolls people
+usually load are 48 columns (80 mm) and 32 columns (58 mm). The setting is
+remembered between sessions and applies to the next receipt; receipts already
+on the desk keep the width they were printed at.
 
 ## Using it from your POS app
 

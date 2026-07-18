@@ -134,79 +134,59 @@ soundToggle.addEventListener("click", () => {
 
 // ---- paper width ----
 //
-// The control is in millimetres (the number printed on a roll's packaging),
-// but layout needs the character column count ESC/POS actually thinks in, so
-// the two standard sizes are pinned to their real column counts and anything
-// else is derived.
-//
-// The derivation can't just scale a single ratio: at 203 dpi (8 dots/mm) with
-// a 12-dot font A cell, an 80mm roll prints 72mm / 576 dots / 48 columns, but
-// a 58mm roll prints only 48mm / 384 dots / 32 columns. The unprintable
-// margin is 8mm on one and 10mm on the other, so a fixed-margin formula gets
-// 58mm wrong by a column. Hence the table for the sizes people actually load,
-// and a nominal 8mm margin for everything in between.
+// The width is set in character columns, which is what ESC/POS actually
+// thinks in and what layout needs — 32 and 48 being the column counts of the
+// 58mm and 80mm rolls people usually load.
 //
 // Receipts already torn off keep the width they were printed at, since
 // handleCut freezes their pixel size before moving them to the desk.
 
-const PAPER_MM_MIN = 32;
-const PAPER_MM_MAX = 152;
-const PAPER_MM_KEY = "escpos-sim:paper-mm";
 const PAPER_COLS_MIN = 16;
 const PAPER_COLS_MAX = 96;
-const PAPER_MARGIN_MM = 8;
-const DOTS_PER_MM = 8; // 203 dpi
-const DOTS_PER_CHAR = 12; // font A cell
+const PAPER_COLS_KEY = "escpos-sim:paper-cols";
 
-const STANDARD_COLS: Record<number, number> = { 58: 32, 80: 48 };
-
-function colsForMm(mm: number): number {
-  const cols = STANDARD_COLS[mm] ?? Math.round(((mm - PAPER_MARGIN_MM) * DOTS_PER_MM) / DOTS_PER_CHAR);
-  return Math.min(PAPER_COLS_MAX, Math.max(PAPER_COLS_MIN, cols));
-}
-
-function applyPaperMm(mm: number) {
-  document.documentElement.style.setProperty("--paper-cols", String(colsForMm(mm)));
+function applyPaperCols(cols: number) {
+  document.documentElement.style.setProperty("--paper-cols", String(cols));
   try {
-    localStorage.setItem(PAPER_MM_KEY, String(mm));
+    localStorage.setItem(PAPER_COLS_KEY, String(cols));
   } catch {
     // Private-mode storage failures shouldn't break the width change itself.
   }
 }
 
-function clampPaperMm(value: number, fallback: number): number {
+function clampPaperCols(value: number, fallback: number): number {
   if (!Number.isFinite(value)) return fallback;
-  return Math.min(PAPER_MM_MAX, Math.max(PAPER_MM_MIN, Math.round(value)));
+  return Math.min(PAPER_COLS_MAX, Math.max(PAPER_COLS_MIN, Math.round(value)));
 }
 
 // Number("") and Number(null) are both 0, so an absent entry has to be ruled
-// out before parsing or it would clamp to PAPER_MM_MIN instead of falling
+// out before parsing or it would clamp to PAPER_COLS_MIN instead of falling
 // back to the markup default.
-const storedMm = (() => {
+const storedCols = (() => {
   try {
-    const raw = localStorage.getItem(PAPER_MM_KEY);
+    const raw = localStorage.getItem(PAPER_COLS_KEY);
     return raw ? Number(raw) : NaN;
   } catch {
     return NaN;
   }
 })();
 
-const initialMm = clampPaperMm(storedMm, Number(paperWidthInput.value) || 80);
-paperWidthInput.value = String(initialMm);
-applyPaperMm(initialMm);
+const initialCols = clampPaperCols(storedCols, Number(paperWidthInput.value) || 48);
+paperWidthInput.value = String(initialCols);
+applyPaperCols(initialCols);
 
 // `input` keeps the paper live while typing; `change`/blur is where a partial
 // or out-of-range entry gets normalised back into the field.
 paperWidthInput.addEventListener("input", () => {
   const raw = Number(paperWidthInput.value);
   if (!paperWidthInput.value.trim() || !Number.isFinite(raw)) return;
-  applyPaperMm(clampPaperMm(raw, initialMm));
+  applyPaperCols(clampPaperCols(raw, initialCols));
 });
 
 paperWidthInput.addEventListener("change", () => {
-  const mm = clampPaperMm(Number(paperWidthInput.value), initialMm);
-  paperWidthInput.value = String(mm);
-  applyPaperMm(mm);
+  const cols = clampPaperCols(Number(paperWidthInput.value), initialCols);
+  paperWidthInput.value = String(cols);
+  applyPaperCols(cols);
 });
 
 function newFeedPaper(): HTMLElement {
