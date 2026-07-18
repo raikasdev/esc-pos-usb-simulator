@@ -4,6 +4,7 @@ import JsBarcode from "jsbarcode";
 interface PrintEvent {
   type: "init" | "align" | "style" | "text" | "new_line" | "cut" | "image" | "qr_code" | "barcode" | "pulse";
   value?: "left" | "center" | "right";
+  font?: "a" | "b";
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
@@ -23,13 +24,16 @@ const led = document.getElementById("led")!;
 const drawer = document.getElementById("drawer")!;
 const receiptDesk = document.getElementById("receiptDesk")!;
 const soundToggle = document.getElementById("soundToggle") as HTMLButtonElement;
+const paperWidthInput = document.getElementById("paperWidth") as HTMLInputElement;
 const hint = document.getElementById("hint")!;
 const printerSound = document.getElementById("printerSound") as HTMLAudioElement;
 const cutterSound = document.getElementById("cutterSound") as HTMLAudioElement;
+const cashDrawerSound = document.getElementById("cashDrawerSound") as HTMLAudioElement;
 
 // ---- print state ----
 
 let align: "left" | "center" | "right" = "left";
+let font: "a" | "b" = "a";
 let bold = false;
 let italic = false;
 let underline = false;
@@ -41,6 +45,7 @@ let currentFeedPaper: HTMLElement | null = null;
 let linesContainer: HTMLElement | null = null;
 let currentLineEl: HTMLElement | null = null;
 let currentRunEl: HTMLElement | null = null;
+let currentRunTextEl: HTMLElement | null = null;
 let currentRunStyleKey = "";
 let topReceiptZ = 100;
 let receiptCount = 0;
@@ -55,6 +60,8 @@ printerSound.volume = 0.28;
 printerSound.loop = true;
 cutterSound.preload = "auto";
 cutterSound.volume = 0.34;
+cashDrawerSound.preload = "auto";
+cashDrawerSound.volume = 0.5;
 
 function getAudioContext(): AudioContext {
   audioContext ??= new AudioContext();
@@ -104,6 +111,12 @@ function stopCutterSound() {
   cutterSound.currentTime = 0;
 }
 
+function playCashDrawerSound() {
+  if (!soundEnabled) return;
+  cashDrawerSound.currentTime = 0;
+  void cashDrawerSound.play().catch(() => undefined);
+}
+
 soundToggle.addEventListener("click", () => {
   soundEnabled = !soundEnabled;
   soundToggle.setAttribute("aria-pressed", String(soundEnabled));
@@ -114,7 +127,86 @@ soundToggle.addEventListener("click", () => {
   } else {
     stopPrintSound();
     stopCutterSound();
+    cashDrawerSound.pause();
+    cashDrawerSound.currentTime = 0;
   }
+});
+
+// ---- paper width ----
+//
+// The control is in millimetres (the number printed on a roll's packaging),
+// but layout needs the character column count ESC/POS actually thinks in, so
+// the two standard sizes are pinned to their real column counts and anything
+// else is derived.
+//
+// The derivation can't just scale a single ratio: at 203 dpi (8 dots/mm) with
+// a 12-dot font A cell, an 80mm roll prints 72mm / 576 dots / 48 columns, but
+// a 58mm roll prints only 48mm / 384 dots / 32 columns. The unprintable
+// margin is 8mm on one and 10mm on the other, so a fixed-margin formula gets
+// 58mm wrong by a column. Hence the table for the sizes people actually load,
+// and a nominal 8mm margin for everything in between.
+//
+// Receipts already torn off keep the width they were printed at, since
+// handleCut freezes their pixel size before moving them to the desk.
+
+const PAPER_MM_MIN = 32;
+const PAPER_MM_MAX = 152;
+const PAPER_MM_KEY = "escpos-sim:paper-mm";
+const PAPER_COLS_MIN = 16;
+const PAPER_COLS_MAX = 96;
+const PAPER_MARGIN_MM = 8;
+const DOTS_PER_MM = 8; // 203 dpi
+const DOTS_PER_CHAR = 12; // font A cell
+
+const STANDARD_COLS: Record<number, number> = { 58: 32, 80: 48 };
+
+function colsForMm(mm: number): number {
+  const cols = STANDARD_COLS[mm] ?? Math.round(((mm - PAPER_MARGIN_MM) * DOTS_PER_MM) / DOTS_PER_CHAR);
+  return Math.min(PAPER_COLS_MAX, Math.max(PAPER_COLS_MIN, cols));
+}
+
+function applyPaperMm(mm: number) {
+  document.documentElement.style.setProperty("--paper-cols", String(colsForMm(mm)));
+  try {
+    localStorage.setItem(PAPER_MM_KEY, String(mm));
+  } catch {
+    // Private-mode storage failures shouldn't break the width change itself.
+  }
+}
+
+function clampPaperMm(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(PAPER_MM_MAX, Math.max(PAPER_MM_MIN, Math.round(value)));
+}
+
+// Number("") and Number(null) are both 0, so an absent entry has to be ruled
+// out before parsing or it would clamp to PAPER_MM_MIN instead of falling
+// back to the markup default.
+const storedMm = (() => {
+  try {
+    const raw = localStorage.getItem(PAPER_MM_KEY);
+    return raw ? Number(raw) : NaN;
+  } catch {
+    return NaN;
+  }
+})();
+
+const initialMm = clampPaperMm(storedMm, Number(paperWidthInput.value) || 80);
+paperWidthInput.value = String(initialMm);
+applyPaperMm(initialMm);
+
+// `input` keeps the paper live while typing; `change`/blur is where a partial
+// or out-of-range entry gets normalised back into the field.
+paperWidthInput.addEventListener("input", () => {
+  const raw = Number(paperWidthInput.value);
+  if (!paperWidthInput.value.trim() || !Number.isFinite(raw)) return;
+  applyPaperMm(clampPaperMm(raw, initialMm));
+});
+
+paperWidthInput.addEventListener("change", () => {
+  const mm = clampPaperMm(Number(paperWidthInput.value), initialMm);
+  paperWidthInput.value = String(mm);
+  applyPaperMm(mm);
 });
 
 function newFeedPaper(): HTMLElement {
@@ -128,6 +220,7 @@ function newFeedPaper(): HTMLElement {
   linesContainer = lines;
   currentLineEl = null;
   currentRunEl = null;
+  currentRunTextEl = null;
   currentRunStyleKey = "";
   return paper;
 }
@@ -139,6 +232,7 @@ function ensureFeedPaper(): HTMLElement {
 
 function resetStyle() {
   align = "left";
+  font = "a";
   bold = false;
   italic = false;
   underline = false;
@@ -148,7 +242,7 @@ function resetStyle() {
 }
 
 function styleKey(): string {
-  return `${align}|${bold}|${italic}|${underline}|${invert}|${width}|${height}`;
+  return `${align}|${font}|${bold}|${italic}|${underline}|${invert}|${width}|${height}`;
 }
 
 function ensureLine(): HTMLElement {
@@ -159,6 +253,7 @@ function ensureLine(): HTMLElement {
     currentLineEl.style.textAlign = align;
     linesContainer!.appendChild(currentLineEl);
     currentRunEl = null;
+    currentRunTextEl = null;
     currentRunStyleKey = "";
   }
   return currentLineEl;
@@ -173,30 +268,41 @@ function appendText(text: string) {
   if (!currentRunEl || currentRunStyleKey !== key) {
     currentRunEl = document.createElement("span");
     currentRunEl.className = "run";
+    if (font === "b") currentRunEl.classList.add("font-b");
     if (bold) currentRunEl.classList.add("bold");
     if (italic) currentRunEl.classList.add("italic");
     if (underline) currentRunEl.classList.add("underline");
     if (invert) currentRunEl.classList.add("invert");
     if (width > 1 || height > 1) {
-      // Scale height via font-size (which reserves the right amount of
-      // line height) and only use a transform for the width axis — a
-      // transform alone doesn't affect layout, so it would visually
-      // overflow into the next line instead of pushing it down.
+      // The outer span reserves the scaled width and height in layout; the
+      // inner span performs only the horizontal visual transform.
       currentRunEl.classList.add("big");
-      currentRunEl.style.setProperty("--font-scale", String(height));
+      currentRunEl.style.fontSize = `${height * (font === "b" ? 0.8 : 1)}em`;
       currentRunEl.style.setProperty("--sx", String(width / height));
+      currentRunTextEl = document.createElement("span");
+      currentRunTextEl.className = "run__ink";
+      currentRunEl.appendChild(currentRunTextEl);
+    } else {
+      currentRunTextEl = currentRunEl;
     }
     currentRunStyleKey = key;
     line.appendChild(currentRunEl);
   }
 
-  currentRunEl.textContent += text;
+  currentRunTextEl!.textContent += text;
+  if (currentRunEl.classList.contains("big")) {
+    // CSS transforms do not affect layout dimensions. Reserve exactly the
+    // transformed ink width so width-only and height-only scaling both flow.
+    const horizontalScale = width / height;
+    currentRunEl.style.width = `${currentRunTextEl!.offsetWidth * horizontalScale}px`;
+  }
   growPaper(currentFeedPaper!);
 }
 
 function commitLine() {
   currentLineEl = null;
   currentRunEl = null;
+  currentRunTextEl = null;
   currentRunStyleKey = "";
   if (currentFeedPaper) growPaper(currentFeedPaper);
 }
@@ -499,7 +605,7 @@ let drawerTimer: ReturnType<typeof setTimeout> | undefined;
 
 function pulseDrawer() {
   drawer.classList.add("kick");
-  playTone(72, 0.14, 0.055, "triangle");
+  playCashDrawerSound();
   clearTimeout(drawerTimer);
   drawerTimer = setTimeout(() => drawer.classList.remove("kick"), 220);
 }
@@ -596,6 +702,7 @@ async function handleCut() {
   linesContainer = null;
   currentLineEl = null;
   currentRunEl = null;
+  currentRunTextEl = null;
   currentRunStyleKey = "";
   resetStyle();
 }
@@ -609,6 +716,7 @@ async function handleEvent(event: PrintEvent) {
       align = event.value ?? "left";
       break;
     case "style":
+      font = event.font ?? "a";
       bold = !!event.bold;
       italic = !!event.italic;
       underline = !!event.underline;

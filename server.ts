@@ -10,6 +10,8 @@ Bun.serve({
       new Response(Bun.file("./assets/receipt-printer.wav")),
     "/assets/receipt-cutter.wav": () =>
       new Response(Bun.file("./assets/receipt-cutter.wav")),
+    "/assets/cash-register.mp3": () =>
+      new Response(Bun.file("./assets/cash-register.mp3")),
   },
   development: {
     hmr: true,

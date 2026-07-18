@@ -42,7 +42,7 @@ fn main() {
     let reg = Gadget::new(
         Class::INTERFACE_SPECIFIC,
         Id::new(VENDOR_ID, PRODUCT_ID),
-        Strings::new("Star Micronics", "Simulated ESC/POS", "SIMULATED-0001"),
+        Strings::new("Star Micronics", "BSC10", "SIMULATED-0001"),
     )
     .with_config(Config::new("ESC/POS Printer").with_function(handle))
     .with_os_descriptor(OsDescriptor::microsoft())
@@ -80,10 +80,17 @@ fn main() {
                 Ok(Some(data)) => {
                     log::debug!("received {} bytes", data.len());
                     for event in parser.feed(&data) {
-                        let completes_receipt = matches!(event, protocol::Event::Cut);
-                        receipt_events.push(event);
-                        if completes_receipt {
-                            reader_broadcaster.publish(std::mem::take(&mut receipt_events));
+                        match event {
+                            // Drawer kicks are independent of receipt output and
+                            // must reach the frontend even when no cut ever follows.
+                            protocol::Event::Pulse => {
+                                reader_broadcaster.publish(vec![protocol::Event::Pulse]);
+                            }
+                            protocol::Event::Cut => {
+                                receipt_events.push(protocol::Event::Cut);
+                                reader_broadcaster.publish(std::mem::take(&mut receipt_events));
+                            }
+                            event => receipt_events.push(event),
                         }
                     }
                 }

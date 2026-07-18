@@ -13,13 +13,29 @@
           <span class="status__dot" aria-hidden="true"></span>
           <span id="statusText">connecting&hellip;</span>
         </div>
-        <button class="sound-toggle" id="soundToggle" type="button" aria-pressed="true">
-          <svg aria-hidden="true" viewBox="0 0 24 24">
-            <path d="M11 5 6.8 8.5H3.5v7h3.3L11 19V5Z" />
-            <path d="M15.2 9.2a4 4 0 0 1 0 5.6m2.7-8.3a7.5 7.5 0 0 1 0 11" />
-          </svg>
-          <span>Sound on</span>
-        </button>
+        <div class="toolbar__right">
+          <label class="paper-width" for="paperWidth">
+            <span>Width</span>
+            <input
+              class="paper-width__input"
+              id="paperWidth"
+              type="number"
+              min="32"
+              max="152"
+              step="1"
+              value="80"
+              inputmode="numeric"
+            />
+            <span class="paper-width__unit">mm</span>
+          </label>
+          <button class="sound-toggle" id="soundToggle" type="button" aria-pressed="true">
+            <svg aria-hidden="true" viewBox="0 0 24 24">
+              <path d="M11 5 6.8 8.5H3.5v7h3.3L11 19V5Z" />
+              <path d="M15.2 9.2a4 4 0 0 1 0 5.6m2.7-8.3a7.5 7.5 0 0 1 0 11" />
+            </svg>
+            <span>Sound on</span>
+          </button>
+        </div>
       </header>
 
       <main class="printer-scene">
@@ -47,6 +63,7 @@
 
     <audio id="printerSound" src="./assets/receipt-printer.wav" preload="auto"></audio>
     <audio id="cutterSound" src="./assets/receipt-cutter.wav" preload="auto"></audio>
+    <audio id="cashDrawerSound" src="./assets/cash-register.mp3" preload="auto"></audio>
     <script type="module" src="./printer.ts"></script>
   </body>
 </html>

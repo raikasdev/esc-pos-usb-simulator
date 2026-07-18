@@ -16,6 +16,7 @@
   --ink: #252522;
   --ink-dim: #8b897f;
   --green: #72df9d;
+  --paper-cols: 48;
   --face-label: Inter, system-ui, -apple-system, sans-serif;
   --face-receipt: ui-monospace, "JetBrains Mono", "SF Mono", Consolas, monospace;
 }
@@ -76,6 +77,7 @@ button { font: inherit; }
 }
 
 .status,
+.paper-width,
 .sound-toggle {
   display: flex;
   align-items: center;
@@ -107,6 +109,45 @@ button { font: inherit; }
   background: var(--green);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 15%, transparent);
 }
+
+.toolbar__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.paper-width {
+  gap: 6px;
+  cursor: text;
+}
+
+.paper-width__input {
+  width: 3.5ch;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.paper-width__input::-webkit-outer-spin-button,
+.paper-width__input::-webkit-inner-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.paper-width__input:focus { outline: none; }
+
+.paper-width:focus-within {
+  color: color-mix(in srgb, var(--muted) 35%, currentColor);
+  border-color: var(--green);
+}
+
+.paper-width__unit { opacity: 0.55; }
 
 .sound-toggle {
   cursor: pointer;
@@ -265,11 +306,11 @@ button { font: inherit; }
 
 .feed__lines {
   box-sizing: content-box;
-  width: 43ch;
+  width: calc(var(--paper-cols) * 1ch);
   padding: 12px 14px 0;
   color: var(--ink);
   font-family: var(--face-receipt);
-  font-size: 12.5px;
+  font-size: 11.5px;
   line-height: 1.55;
   white-space: pre;
   text-shadow: 0 0 0.3px currentColor;
@@ -279,12 +320,17 @@ button { font: inherit; }
   min-height: 1.55em;
   animation: ink-develop 180ms ease-out both;
 }
+.run.font-b { font-size: 0.8em; }
 .run.bold { font-weight: 700; }
 .run.underline { text-decoration: underline; }
 .run.italic { font-style: italic; }
 .run.big {
   display: inline-block;
-  font-size: calc(1em * var(--font-scale, 1));
+  vertical-align: top;
+}
+.run__ink {
+  display: inline-block;
+  white-space: pre;
   transform: scaleX(var(--sx, 1));
   transform-origin: left top;
 }

@@ -15,14 +15,35 @@ use serde::Serialize;
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
     Init,
-    Align { value: &'static str },
-    Style { bold: bool, italic: bool, underline: bool, invert: bool, width: u8, height: u8 },
-    Text { text: String },
+    Align {
+        value: &'static str,
+    },
+    Style {
+        font: &'static str,
+        bold: bool,
+        italic: bool,
+        underline: bool,
+        invert: bool,
+        width: u8,
+        height: u8,
+    },
+    Text {
+        text: String,
+    },
     NewLine,
     Cut,
-    Image { width: u32, height: u32, bits: String },
-    QrCode { data: String },
-    Barcode { symbology: &'static str, data: String },
+    Image {
+        width: u32,
+        height: u32,
+        bits: String,
+    },
+    QrCode {
+        data: String,
+    },
+    Barcode {
+        symbology: &'static str,
+        data: String,
+    },
     Pulse,
 }
 
@@ -36,6 +57,7 @@ struct ColumnImage {
 
 pub struct Parser {
     buf: Vec<u8>,
+    font: &'static str,
     bold: bool,
     italic: bool,
     underline: bool,
@@ -51,6 +73,7 @@ impl Parser {
     pub fn new() -> Self {
         Self {
             buf: Vec::new(),
+            font: "a",
             bold: false,
             italic: false,
             underline: false,
@@ -65,6 +88,7 @@ impl Parser {
 
     fn style_event(&self) -> Event {
         Event::Style {
+            font: self.font,
             bold: self.bold,
             italic: self.italic,
             underline: self.underline,
@@ -75,6 +99,7 @@ impl Parser {
     }
 
     fn reset_style(&mut self) {
+        self.font = "a";
         self.bold = false;
         self.italic = false;
         self.underline = false;
@@ -82,6 +107,11 @@ impl Parser {
         self.width = 1;
         self.height = 1;
         self.codepage = crate::codepage::Codepage::Cp437;
+    }
+
+    #[cfg(test)]
+    pub fn buffered_len(&self) -> usize {
+        self.buf.len()
     }
 
     /// Feed newly-received bytes and return every event they complete.
@@ -112,12 +142,29 @@ impl Parser {
                     Some(consumed) => i += consumed,
                     None => break,
                 },
+                0x10 => match self.parse_dle(i, &mut events) {
+                    Some(consumed) => i += consumed,
+                    None => break,
+                },
                 _ => {
                     let start = i;
-                    while i < self.buf.len() && !matches!(self.buf[i], 0x1b | 0x1d | 0x1c | b'\n' | b'\r') {
+                    while i < self.buf.len()
+                        && !matches!(self.buf[i], 0x1b | 0x1d | 0x1c | 0x10 | b'\n' | b'\r')
+                    {
                         i += 1;
                     }
-                    let text = crate::codepage::decode(self.codepage, &self.buf[start..i]);
+                    let raw = &self.buf[start..i];
+                    if log::log_enabled!(log::Level::Debug) {
+                        let stray: Vec<u8> = raw.iter().copied().filter(|b| *b < 0x20).collect();
+                        if !stray.is_empty() {
+                            log::debug!(
+                                "dropped {} unprintable byte(s) before printing: {stray:02x?} \
+                                 (an unrecognised command reached the text stream)",
+                                stray.len()
+                            );
+                        }
+                    }
+                    let text = crate::codepage::decode(self.codepage, raw);
                     if !text.is_empty() {
                         events.push(Event::Text { text });
                     }
@@ -135,6 +182,48 @@ impl Parser {
         Some(2)
     }
 
+    /// `DLE` real-time commands: status queries and the real-time drawer kick.
+    ///
+    /// These matter more than their rarity suggests. Client libraries poll
+    /// `DLE EOT n` for paper/cover state *asynchronously*, so the bytes can
+    /// land between two print jobs rather than inside one. Left unparsed they
+    /// fell through to the text branch, which is how `► ♦ ☺` ended up printed
+    /// at the top of the *next* receipt (the daemon starts a new event batch
+    /// after each cut, so anything arriving after it belongs to the next one).
+    fn parse_dle(&self, i: usize, events: &mut Vec<Event>) -> Option<usize> {
+        let data = &self.buf[i..];
+        match *data.get(1)? {
+            // DLE EOT n — transmit real-time status. The reply goes on the IN
+            // endpoint, which nothing reads here; consuming it is enough.
+            0x04 => {
+                data.get(2)?;
+                Some(3)
+            }
+            // DLE ENQ — real-time request to recover from an error.
+            0x05 => Some(2),
+            0x14 => match *data.get(2)? {
+                // DLE DC4 1 m t — real-time drawer pulse.
+                0x01 => {
+                    data.get(4)?;
+                    events.push(Event::Pulse);
+                    Some(5)
+                }
+                // Power-off / transmit-specified-status.
+                0x02 | 0x03 => {
+                    data.get(3)?;
+                    Some(4)
+                }
+                // Clear buffer: a fixed seven-byte parameter block.
+                0x08 => {
+                    data.get(9)?;
+                    Some(10)
+                }
+                _ => Some(3),
+            },
+            _ => Some(2),
+        }
+    }
+
     fn parse_esc(&mut self, i: usize, events: &mut Vec<Event>) -> Option<usize> {
         let data = &self.buf[i..];
         match *data.get(1)? {
@@ -144,8 +233,10 @@ impl Parser {
                 Some(2)
             }
             b'M' => {
-                data.get(2)?;
-                Some(3) // font select — not rendered differently for now
+                let n = *data.get(2)?;
+                self.font = if matches!(n, 1 | 49) { "b" } else { "a" };
+                events.push(self.style_event());
+                Some(3)
             }
             b'a' => {
                 let n = *data.get(2)?;
@@ -185,6 +276,28 @@ impl Parser {
                 events.push(Event::Pulse);
                 Some(5)
             }
+            // Legacy Epson full/partial cut commands.
+            b'i' | b'm' => {
+                events.push(Event::Cut);
+                Some(2)
+            }
+            // Feed n lines. Preserve the vertical space instead of allowing
+            // the parameter byte to leak into printable text.
+            b'd' => {
+                let lines = *data.get(2)?;
+                events.extend((0..lines).map(|_| Event::NewLine));
+                Some(3)
+            }
+            // Feed n dots and common fixed-width configuration commands.
+            b'J' | b' ' | b'R' | b'{' => {
+                data.get(2)?;
+                Some(3)
+            }
+            // Absolute/relative horizontal position.
+            b'$' | b'\\' => {
+                data.get(3)?;
+                Some(4)
+            }
             b'3' => {
                 data.get(2)?; // line spacing (column-mode image prep)
                 Some(3)
@@ -207,9 +320,11 @@ impl Parser {
                 // some simpler client libraries send this instead of the
                 // separate ESC E / GS ! commands; support both.
                 let n = *data.get(2)?;
+                self.font = if n & 0x01 != 0 { "b" } else { "a" };
                 self.bold = n & 0x08 != 0;
                 self.width = if n & 0x20 != 0 { 2 } else { 1 };
                 self.height = if n & 0x10 != 0 { 2 } else { 1 };
+                self.underline = n & 0x80 != 0;
                 events.push(self.style_event());
                 Some(3)
             }
@@ -233,8 +348,8 @@ impl Parser {
             }
             b'!' => {
                 let n = *data.get(2)?;
-                self.height = (n & 0x0f) + 1;
-                self.width = ((n >> 4) & 0x0f) + 1;
+                self.height = (n & 0x07) + 1;
+                self.width = ((n >> 4) & 0x07) + 1;
                 events.push(self.style_event());
                 Some(3)
             }
@@ -250,9 +365,39 @@ impl Parser {
             }
             b'k' => self.parse_barcode(i, events),
             b'v' => self.parse_raster_image(i, events),
-            b'(' if data.get(2) == Some(&b'k') => self.parse_2d_symbol(i, events),
+            // Do not decide that `GS (` is unknown until the discriminator
+            // byte arrives. USB bulk packets can split at any byte.
+            b'(' => {
+                let function = *data.get(2)?;
+                if function == b'k' {
+                    self.parse_2d_symbol(i, events)
+                } else {
+                    self.skip_length_prefixed_gs_command(i)
+                }
+            }
+            // Two-byte parameters used for print-area and positioning setup.
+            b'L' | b'W' | b'$' | b'\\' | b'P' => {
+                data.get(3)?;
+                Some(4)
+            }
+            // Common one-byte configuration commands.
+            b'f' | b'I' => {
+                data.get(2)?;
+                Some(3)
+            }
             _ => Some(2),
         }
+    }
+
+    /// Skip an unsupported `GS ( x pL pH ...` command without losing stream
+    /// synchronization. Its length has the same framing as `GS ( k`.
+    fn skip_length_prefixed_gs_command(&self, i: usize) -> Option<usize> {
+        let data = &self.buf[i..];
+        let p_l = *data.get(3)? as usize;
+        let p_h = *data.get(4)? as usize;
+        let consumed = 5 + p_l + p_h * 256;
+        data.get(consumed - 1)?;
+        Some(consumed)
     }
 
     /// `ESC * m nL nH data... LF` — one column-mode image strip, up to 24
@@ -281,10 +426,15 @@ impl Parser {
 
         let width_bytes = width.div_ceil(8);
         let dots_per_col = bytes_per_col * 8;
-        let image = self.column_image.get_or_insert_with(|| ColumnImage { width_bytes, rows: Vec::new() });
+        let image = self.column_image.get_or_insert_with(|| ColumnImage {
+            width_bytes,
+            rows: Vec::new(),
+        });
 
         let row_offset = (image.rows.len() as u32) / width_bytes;
-        image.rows.resize(image.rows.len() + (width_bytes * dots_per_col) as usize, 0);
+        image
+            .rows
+            .resize(image.rows.len() + (width_bytes * dots_per_col) as usize, 0);
 
         for x in 0..width {
             for c in 0..bytes_per_col {
@@ -311,12 +461,18 @@ impl Parser {
         if identifier > 0x40 {
             let len = *data.get(3)? as usize;
             let bytes = data.get(4..4 + len)?;
-            events.push(Event::Barcode { symbology, data: crate::codepage::decode_latin1(bytes) });
+            events.push(Event::Barcode {
+                symbology,
+                data: crate::codepage::decode_latin1(bytes),
+            });
             Some(4 + len)
         } else {
             let start = 3;
             let end = start + data[start..].iter().position(|&b| b == 0)?;
-            events.push(Event::Barcode { symbology, data: crate::codepage::decode_latin1(&data[start..end]) });
+            events.push(Event::Barcode {
+                symbology,
+                data: crate::codepage::decode_latin1(&data[start..end]),
+            });
             Some(end + 1)
         }
     }
@@ -409,23 +565,181 @@ impl Default for Parser {
 mod tests {
     use super::*;
 
+    fn event_json(events: &[Event]) -> String {
+        serde_json::to_string(events).unwrap()
+    }
+
+    fn feed_one_byte_at_a_time(bytes: &[u8]) -> Vec<Event> {
+        let mut parser = Parser::new();
+        let mut events = Vec::new();
+        for byte in bytes {
+            events.extend(parser.feed(std::slice::from_ref(byte)));
+        }
+        events
+    }
+
     #[test]
     fn embedded_newline_cr_from_real_encoder() {
         // Exact bytes @point-of-sale/receipt-printer-encoder produces for
         // .text("line one\nline two").newline() with its default '\n\r'
         // newline setting.
         let bytes = [
-            0x1b, 0x40, 0x1c, 0x2e, 0x1b, 0x4d, 0x00, 0x1b, 0x74, 0x00, b'l', b'i', b'n', b'e', b' ', b'o', b'n',
-            b'e', 0x0a, 0x0d, b'l', b'i', b'n', b'e', b' ', b't', b'w', b'o', 0x0a, 0x0d,
+            0x1b, 0x40, 0x1c, 0x2e, 0x1b, 0x4d, 0x00, 0x1b, 0x74, 0x00, b'l', b'i', b'n', b'e',
+            b' ', b'o', b'n', b'e', 0x0a, 0x0d, b'l', b'i', b'n', b'e', b' ', b't', b'w', b'o',
+            0x0a, 0x0d,
         ];
         let mut parser = Parser::new();
         let events = parser.feed(&bytes);
 
-        let texts: Vec<&str> =
-            events.iter().filter_map(|e| if let Event::Text { text } = e { Some(text.as_str()) } else { None }).collect();
+        let texts: Vec<&str> = events
+            .iter()
+            .filter_map(|e| {
+                if let Event::Text { text } = e {
+                    Some(text.as_str())
+                } else {
+                    None
+                }
+            })
+            .collect();
         assert_eq!(texts, vec!["line one", "line two"]);
 
-        let newlines = events.iter().filter(|e| matches!(e, Event::NewLine)).count();
+        let newlines = events
+            .iter()
+            .filter(|e| matches!(e, Event::NewLine))
+            .count();
         assert_eq!(newlines, 2, "events: {events:?}");
+    }
+
+    #[test]
+    fn qr_command_is_safe_across_every_usb_packet_boundary() {
+        let bytes = [
+            0x1d, 0x28, 0x6b, 0x08, 0x00, 0x31, 0x50, 0x30, b'H', b'e', b'l', b'l', b'o', 0x1d,
+            0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30,
+        ];
+
+        let mut whole_parser = Parser::new();
+        let expected = whole_parser.feed(&bytes);
+        assert!(matches!(expected.as_slice(), [Event::QrCode { data }] if data == "Hello"));
+
+        for split in 0..=bytes.len() {
+            let mut parser = Parser::new();
+            let mut actual = parser.feed(&bytes[..split]);
+            actual.extend(parser.feed(&bytes[split..]));
+            assert_eq!(
+                event_json(&actual),
+                event_json(&expected),
+                "split at byte {split}"
+            );
+        }
+
+        assert_eq!(
+            event_json(&feed_one_byte_at_a_time(&bytes)),
+            event_json(&expected)
+        );
+    }
+
+    #[test]
+    fn unsupported_length_prefixed_gs_command_does_not_print_its_payload() {
+        let bytes = [0x1d, b'(', b'X', 0x03, 0x00, 1, 2, 3, b'O', b'K'];
+        let events = feed_one_byte_at_a_time(&bytes);
+        let text: String = events
+            .iter()
+            .filter_map(|event| match event {
+                Event::Text { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(text, "OK", "{events:?}");
+    }
+
+    #[test]
+    fn legacy_cuts_and_feed_lines_produce_events() {
+        let events = feed_one_byte_at_a_time(&[0x1b, b'd', 2, 0x1b, b'i', 0x1b, b'm']);
+        assert!(matches!(
+            events.as_slice(),
+            [Event::NewLine, Event::NewLine, Event::Cut, Event::Cut]
+        ));
+    }
+
+    fn printed_text(events: &[Event]) -> String {
+        events
+            .iter()
+            .filter_map(|event| match event {
+                Event::Text { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Regression: real-time status polls used to print as `► ♦ ☺` at the top
+    /// of whichever receipt was being composed when they arrived.
+    #[test]
+    fn realtime_status_queries_print_nothing() {
+        for query in [
+            [0x10, 0x04, 0x01].as_slice(), // DLE EOT 1 — printer status
+            [0x10, 0x04, 0x04].as_slice(), // DLE EOT 4 — paper sensor status
+            [0x10, 0x05].as_slice(),       // DLE ENQ
+            [0x10, 0x14, 0x02, 0x01].as_slice(),
+            [0x10, 0x14, 0x08, 1, 3, 20, 1, 6, 2, 8].as_slice(),
+        ] {
+            let mut bytes = query.to_vec();
+            bytes.extend_from_slice(b"Mangatukku");
+            let events = feed_one_byte_at_a_time(&bytes);
+            assert_eq!(
+                printed_text(&events),
+                "Mangatukku",
+                "status query {query:02x?} leaked into printed text: {events:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn realtime_drawer_kick_pulses_without_printing() {
+        let events = feed_one_byte_at_a_time(&[0x10, 0x14, 0x01, 0x00, 0x01]);
+        assert!(matches!(events.as_slice(), [Event::Pulse]), "{events:?}");
+    }
+
+    /// A finished job must leave nothing buffered, or its remnants would be
+    /// parsed as part of the next receipt.
+    #[test]
+    fn a_complete_job_leaves_no_buffered_bytes() {
+        let bytes = [
+            0x1b, 0x40, // ESC @
+            0x1b, 0x74, 0x00, // ESC t 0
+            0x1b, 0x61, 0x01, // ESC a 1
+            0x1d, 0x21, 0x11, // GS ! double
+            b'H', b'i', 0x0a, //
+            0x10, 0x04, 0x01, // status poll mid-job
+            0x1b, 0x70, 0x00, 50, 250, // ESC p drawer
+            0x1d, 0x56, 0x00, // GS V cut
+        ];
+        let mut parser = Parser::new();
+        parser.feed(&bytes);
+        assert_eq!(parser.buffered_len(), 0);
+    }
+
+    #[test]
+    fn combined_print_mode_preserves_all_supported_style_bits() {
+        let events = feed_one_byte_at_a_time(&[0x1b, b'!', 0xb9]);
+        assert!(matches!(
+            events.as_slice(),
+            [Event::Style {
+                font: "b",
+                bold: true,
+                underline: true,
+                width: 2,
+                height: 2,
+                ..
+            }]
+        ));
+    }
+
+    #[test]
+    fn cash_drawer_pulse_is_sound_only() {
+        let mut parser = Parser::new();
+        let events = parser.feed(&[0x1b, b'p', 0x00, 0x19, 0xfa]);
+
+        assert!(matches!(events.as_slice(), [Event::Pulse]));
+        assert_eq!(parser.buffered_len(), 0);
     }
 }

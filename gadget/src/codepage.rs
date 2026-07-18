@@ -1,158 +1,119 @@
-//! CP437 ("USA, Standard Europe") byte -> Unicode codepoint table — the
-//! default ESC/POS codepage. Extracted from
-//! `@point-of-sale/codepage-encoder`'s `getCodepoints("cp437", true)`, the
-//! library the user's actual client (`@point-of-sale/receipt-printer-encoder`)
-//! uses to turn text into bytes, so this must match it byte-for-byte.
+//! ESC/POS byte-to-Unicode decoding for the Star codepage mapping used by
+//! `@point-of-sale/receipt-printer-encoder`.
 //!
-//! Codepage switching (`ESC t n`) is parsed but not acted on: real encoders
-//! default to CP437 unless configured for a specific printer model, and this
-//! covers the overwhelming majority of real-world receipts.
-#[rustfmt::skip]
-const CP437: [u32; 256] = [
-    0,  9786,  9787,  9829,  9830,  9827,  9824,  8226,
- 9688,  9675,  9689,  9794,  9792,  9834,  9835,  9788,
- 9658,  9668,  8597,  8252,   182,   167,  9644,  8616,
- 8593,  8595,  8594,  8592,  8735,  8596,  9650,  9660,
-   32,    33,    34,    35,    36,    37,    38,    39,
-   40,    41,    42,    43,    44,    45,    46,    47,
-   48,    49,    50,    51,    52,    53,    54,    55,
-   56,    57,    58,    59,    60,    61,    62,    63,
-   64,    65,    66,    67,    68,    69,    70,    71,
-   72,    73,    74,    75,    76,    77,    78,    79,
-   80,    81,    82,    83,    84,    85,    86,    87,
-   88,    89,    90,    91,    92,    93,    94,    95,
-   96,    97,    98,    99,   100,   101,   102,   103,
-  104,   105,   106,   107,   108,   109,   110,   111,
-  112,   113,   114,   115,   116,   117,   118,   119,
-  120,   121,   122,   123,   124,   125,   126,  8962,
-  199,   252,   233,   226,   228,   224,   229,   231,
-  234,   235,   232,   239,   238,   236,   196,   197,
-  201,   230,   198,   244,   246,   242,   251,   249,
-  255,   214,   220,   162,   163,   165,  8359,   402,
-  225,   237,   243,   250,   241,   209,   170,   186,
-  191,  8976,   172,   189,   188,   161,   171,   187,
- 9617,  9618,  9619,  9474,  9508,  9569,  9570,  9558,
- 9557,  9571,  9553,  9559,  9565,  9564,  9563,  9488,
- 9492,  9524,  9516,  9500,  9472,  9532,  9566,  9567,
- 9562,  9556,  9577,  9574,  9568,  9552,  9580,  9575,
- 9576,  9572,  9573,  9561,  9560,  9554,  9555,  9579,
- 9578,  9496,  9484,  9608,  9604,  9612,  9616,  9600,
-  945,   223,   915,   960,   931,   963,   181,   964,
-  934,   920,   937,   948,  8734,   966,   949,  8745,
- 8801,   177,  8805,  8804,  8992,  8993,   247,  8776,
-  176,  8729,   183,  8730,  8319,   178,  9632,   160,
-];
+//! The tables are generated from Niels Leenheer's CodepageEncoder package;
+//! see `gadget/tools/generate-codepage-tables.mjs`.
 
-/// Windows-1252 — identical to CP437 for 0x00-0x7F and to Latin-1 for
-/// 0xA0-0xFF; only 0x80-0x9F (smart quotes, dashes, and crucially the Euro
-/// sign at 0x80) differ. Extracted the same way as CP437, from
-/// `getCodepoints("windows1252", true)`.
-#[rustfmt::skip]
-const WINDOWS_1252: [u32; 256] = [
-    0,     1,     2,     3,     4,     5,     6,     7,
-    8,     9,    10,    11,    12,    13,    14,    15,
-   16,    17,    18,    19,    20,    21,    22,    23,
-   24,    25,    26,    27,    28,    29,    30,    31,
-   32,    33,    34,    35,    36,    37,    38,    39,
-   40,    41,    42,    43,    44,    45,    46,    47,
-   48,    49,    50,    51,    52,    53,    54,    55,
-   56,    57,    58,    59,    60,    61,    62,    63,
-   64,    65,    66,    67,    68,    69,    70,    71,
-   72,    73,    74,    75,    76,    77,    78,    79,
-   80,    81,    82,    83,    84,    85,    86,    87,
-   88,    89,    90,    91,    92,    93,    94,    95,
-   96,    97,    98,    99,   100,   101,   102,   103,
-  104,   105,   106,   107,   108,   109,   110,   111,
-  112,   113,   114,   115,   116,   117,   118,   119,
-  120,   121,   122,   123,   124,   125,   126,   127,
- 8364, 65533,  8218,   402,  8222,  8230,  8224,  8225,
-  710,  8240,   352,  8249,   338, 65533,   381, 65533,
-65533,  8216,  8217,  8220,  8221,  8226,  8211,  8212,
-  732,  8482,   353,  8250,   339, 65533,   382,   376,
-  160,   161,   162,   163,   164,   165,   166,   167,
-  168,   169,   170,   171,   172,   173,   174,   175,
-  176,   177,   178,   179,   180,   181,   182,   183,
-  184,   185,   186,   187,   188,   189,   190,   191,
-  192,   193,   194,   195,   196,   197,   198,   199,
-  200,   201,   202,   203,   204,   205,   206,   207,
-  208,   209,   210,   211,   212,   213,   214,   215,
-  216,   217,   218,   219,   220,   221,   222,   223,
-  224,   225,   226,   227,   228,   229,   230,   231,
-  232,   233,   234,   235,   236,   237,   238,   239,
-  240,   241,   242,   243,   244,   245,   246,   247,
-  248,   249,   250,   251,   252,   253,   254,   255,
-];
-
-/// CP850 ("Multilingual Latin-1") — like CP437 but swaps some of the
-/// box-drawing/Greek glyphs for Western European accented letters. Notably
-/// `0x9E` is `×` (multiplication sign) here, not `₧` as in CP437.
-#[rustfmt::skip]
-const CP850: [u32; 256] = [
-    0,  9786,  9787,  9829,  9830,  9827,  9824,  8226,
- 9688,  9675,  9689,  9794,  9792,  9834,  9835,  9788,
- 9658,  9668,  8597,  8252,   182,   167,  9644,  8616,
- 8593,  8595,  8594,  8592,  8735,  8596,  9650,  9660,
-   32,    33,    34,    35,    36,    37,    38,    39,
-   40,    41,    42,    43,    44,    45,    46,    47,
-   48,    49,    50,    51,    52,    53,    54,    55,
-   56,    57,    58,    59,    60,    61,    62,    63,
-   64,    65,    66,    67,    68,    69,    70,    71,
-   72,    73,    74,    75,    76,    77,    78,    79,
-   80,    81,    82,    83,    84,    85,    86,    87,
-   88,    89,    90,    91,    92,    93,    94,    95,
-   96,    97,    98,    99,   100,   101,   102,   103,
-  104,   105,   106,   107,   108,   109,   110,   111,
-  112,   113,   114,   115,   116,   117,   118,   119,
-  120,   121,   122,   123,   124,   125,   126,  8962,
-  199,   252,   233,   226,   228,   224,   229,   231,
-  234,   235,   232,   239,   238,   236,   196,   197,
-  201,   230,   198,   244,   246,   242,   251,   249,
-  255,   214,   220,   248,   163,   216,   215,   402,
-  225,   237,   243,   250,   241,   209,   170,   186,
-  191,   174,   172,   189,   188,   161,   171,   187,
- 9617,  9618,  9619,  9474,  9508,   193,   194,   192,
-  169,  9571,  9553,  9559,  9565,   162,   165,  9488,
- 9492,  9524,  9516,  9500,  9472,  9532,   227,   195,
- 9562,  9556,  9577,  9574,  9568,  9552,  9580,   164,
-  240,   208,   202,   203,   200,   305,   205,   206,
-  207,  9496,  9484,  9608,  9604,   166,   204,  9600,
-  211,   223,   212,   210,   245,   213,   181,   254,
-  222,   218,   219,   217,   253,   221,   175,   180,
-  173,   177,  8215,   190,   182,   167,   247,   184,
-  176,   168,   183,   185,   179,   178,  9632,   160,
-];
+#[path = "codepage_tables.rs"]
+mod tables;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Codepage {
     Cp437,
+    StarKatakana,
     Cp850,
+    Cp860,
+    Cp863,
+    Cp865,
     Windows1252,
+    Cp866,
+    Cp852,
+    Cp858,
+    Thai42,
+    Thai11,
+    Thai13,
+    Thai14,
+    Thai16,
+    Thai18,
 }
 
-/// Maps the numeric argument of `ESC t n` to a codepage — specific to the
-/// Star BSC10's codepage table (see `@point-of-sale/codepage-encoder`'s
-/// `star` mapping group), since that's the printer identity this simulator
-/// presents. Unrecognized indices fall back to CP437, the universal
-/// ESC/POS default, rather than failing.
+/// Map `ESC t n` exactly like ReceiptPrinterEncoder's Star ESC/POS mapping.
+/// Unknown values use CP437, the ESC/POS default, so they never desynchronize
+/// the byte stream.
 pub fn codepage_from_star_index(n: u8) -> Codepage {
     match n {
-        2 => Codepage::Cp850,
-        16 => Codepage::Windows1252,
+        0x01 => Codepage::StarKatakana,
+        0x02 => Codepage::Cp850,
+        0x03 => Codepage::Cp860,
+        0x04 => Codepage::Cp863,
+        0x05 => Codepage::Cp865,
+        0x10 => Codepage::Windows1252,
+        0x11 => Codepage::Cp866,
+        0x12 => Codepage::Cp852,
+        0x13 => Codepage::Cp858,
+        0x14 => Codepage::Thai42,
+        0x15 => Codepage::Thai11,
+        0x16 => Codepage::Thai13,
+        0x17 => Codepage::Thai14,
+        0x18 => Codepage::Thai16,
+        0x1a => Codepage::Thai18,
         _ => Codepage::Cp437,
     }
 }
 
-pub fn decode(codepage: Codepage, bytes: &[u8]) -> String {
-    let table = match codepage {
-        Codepage::Cp437 => &CP437,
-        Codepage::Cp850 => &CP850,
-        Codepage::Windows1252 => &WINDOWS_1252,
-    };
-    bytes.iter().filter_map(|&b| char::from_u32(table[b as usize])).collect()
+fn table(codepage: Codepage) -> &'static [u32; 256] {
+    match codepage {
+        Codepage::Cp437 => &tables::CP437,
+        Codepage::StarKatakana => &tables::STAR_KATAKANA,
+        Codepage::Cp850 => &tables::CP850,
+        Codepage::Cp860 => &tables::CP860,
+        Codepage::Cp863 => &tables::CP863,
+        Codepage::Cp865 => &tables::CP865,
+        Codepage::Windows1252 => &tables::WINDOWS_1252,
+        Codepage::Cp866 => &tables::CP866,
+        Codepage::Cp852 => &tables::CP852,
+        Codepage::Cp858 => &tables::CP858,
+        Codepage::Thai42 => &tables::THAI42,
+        Codepage::Thai11 => &tables::THAI11,
+        Codepage::Thai13 => &tables::THAI13,
+        Codepage::Thai14 => &tables::THAI14,
+        Codepage::Thai16 => &tables::THAI16,
+        Codepage::Thai18 => &tables::THAI18,
+    }
 }
 
-/// QR/PDF417 payload data is sent as ISO-8859-1 (Latin-1), where every byte
-/// is its own codepoint — used verbatim, not passed through CP437.
+/// Decode a run of printable text.
+///
+/// Bytes below 0x20 are decoded through the table like any other, which is
+/// how `cp437(&[0x04; 44])` in the test client draws a rule of `♦`. That
+/// permissiveness is deliberate, but it means any command byte the parser
+/// fails to consume shows up as a CP437 glyph on the receipt rather than
+/// being silently ignored — see the debug log in `Parser::feed`.
+pub fn decode(codepage: Codepage, bytes: &[u8]) -> String {
+    let codepoints = table(codepage);
+    bytes
+        .iter()
+        .filter_map(|&byte| char::from_u32(codepoints[byte as usize]))
+        .collect()
+}
+
+/// QR/PDF417 and barcode payloads are encoded as ISO-8859-1 by the reference
+/// encoder, where every byte maps directly to the same Unicode codepoint.
 pub fn decode_latin1(bytes: &[u8]) -> String {
-    bytes.iter().map(|&b| b as char).collect()
+    bytes.iter().map(|&byte| byte as char).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn star_mapping_decodes_representative_reference_bytes() {
+        assert_eq!(decode(Codepage::Cp437, &[0x04, 0x82]), "♦é");
+        assert_eq!(decode(Codepage::Cp858, &[0xd5]), "€");
+        assert_eq!(decode(Codepage::Windows1252, &[0x80, 0x93, 0x94]), "€“”");
+        assert_eq!(
+            decode(Codepage::Cp866, &[0x8f, 0xe0, 0xa8, 0xa2, 0xa5, 0xe2]),
+            "Привет"
+        );
+        assert_eq!(decode(Codepage::StarKatakana, &[0xa6, 0xb1, 0xdd]), "ｦｱﾝ");
+    }
+
+    #[test]
+    fn star_indices_match_receipt_printer_encoder_mapping() {
+        assert_eq!(codepage_from_star_index(0x02), Codepage::Cp850);
+        assert_eq!(codepage_from_star_index(0x12), Codepage::Cp852);
+        assert_eq!(codepage_from_star_index(0x13), Codepage::Cp858);
+        assert_eq!(codepage_from_star_index(0xff), Codepage::Cp437);
+    }
 }
