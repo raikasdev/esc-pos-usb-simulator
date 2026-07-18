@@ -1,3 +1,5 @@
+<img width="1900" height="1000" alt="Simulator screenshot" src="https://github.com/user-attachments/assets/05a808c7-c826-4efa-b6ae-b561f8556672" />
+
 # USB ESC/POS printer simulator
 
 This is a small Rust program that creates a virtual USB device that looks
